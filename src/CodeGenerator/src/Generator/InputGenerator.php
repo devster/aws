@@ -247,12 +247,14 @@ class InputGenerator
 
         $body['querystring'] = '$query = [];' . "\n";
 
-        foreach (['header' => '$headers', 'querystring' => '$query', 'uri' => '$uri'] as $requestPart => $varName) {
+        foreach (['header' => '$headers', 'headers' => '$headers', 'querystring' => '$query', 'uri' => '$uri'] as $requestPart => $varName) {
             foreach ($inputShape->getMembers() as $member) {
                 // If location is not specified, it will go in the request body.
                 if ($requestPart !== $member->getLocation()) {
                     continue;
                 }
+
+                $_requestPart = 'headers' === $requestPart ? 'header' : $requestPart;
 
                 $memberShape = $member->getShape();
                 if ($member->isRequired()) {
@@ -262,6 +264,11 @@ class InputGenerator
                     VALIDATE_ENUM
                     VAR_NAME["LOCATION"] = VALUE;';
                     $inputElement = '$v';
+                } elseif ('map' === $memberShape->getType() && 'headers' === $requestPart) {
+                    $bodyCode = 'foreach ($this->PROPERTY as $key => $value) {
+                        VAR_NAME["LOCATION" . (string) $key] = (string) $value;
+                    }';
+                    $inputElement = '';
                 } else {
                     $bodyCode = 'if (null !== $this->PROPERTY) {
                         VALIDATE_ENUM
@@ -287,12 +294,12 @@ class InputGenerator
                     'LOCATION' => $member->getLocationName() ?? $member->getName(),
                     'VALIDATE_ENUM' => $validateEnum,
                     'INPUT' => $inputElement,
-                    'VALUE' => $this->stringify($inputElement, $member, $requestPart),
+                    'VALUE' => $this->stringify($inputElement, $member, $_requestPart),
                 ]);
-                if (!isset($body[$requestPart])) {
-                    $body[$requestPart] = $varName . ' = [];' . "\n";
+                if (!isset($body[$_requestPart])) {
+                    $body[$_requestPart] = $varName . ' = [];' . "\n";
                 }
-                $body[$requestPart] .= implode("\n", \array_filter(array_map('trim', explode("\n", $bodyCode))));
+                $body[$_requestPart] .= implode("\n", \array_filter(array_map('trim', explode("\n", $bodyCode))));
             }
         }
 
@@ -353,7 +360,7 @@ PHP
      */
     private function stringify(string $variable, Member $member, string $part): string
     {
-        if ('header' !== $part && 'querystring' !== $part && 'uri' !== $part) {
+        if ('header' !== $part && 'headers' !== $part && 'querystring' !== $part && 'uri' !== $part) {
             throw new \InvalidArgumentException(sprintf('Argument 3 of "%s::%s" must be either "header" or "querystring" or "uri". Value "%s" provided', __CLASS__, __FUNCTION__, $part));
         }
 
@@ -372,7 +379,9 @@ PHP
             case 'long':
                 return $variable;
             case 'integer':
-            return '(string) ' . $variable;
+                return '(string) ' . $variable;
+            case 'map':
+                return '';
         }
 
         throw new \InvalidArgumentException(sprintf('Type "%s" is not yet implemented', $shape->getType()));

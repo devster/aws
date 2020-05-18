@@ -619,6 +619,9 @@ final class PutObjectRequest extends Input
             }
             $headers['x-amz-object-lock-legal-hold'] = $this->ObjectLockLegalHoldStatus;
         }
+        foreach ($this->Metadata as $key => $value) {
+            $headers['x-amz-meta-' . (string) $key] = (string) $value;
+        }
 
         // Prepare query
         $query = [];
